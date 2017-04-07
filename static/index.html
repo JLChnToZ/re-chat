@@ -1,0 +1,345 @@
+<!DOCTYPE HTML>
+<HTML data-ts-native>
+<Head>
+<Title>Re-Chat Ver 0.0.1</Title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+</Head>
+<Body>
+<div class="ts menu"></div>
+<div class="ts narrow container">
+  <div class="ts grid">
+    <div class="four wide column">
+      <div class="ts card">
+        <div class="content">
+          <div class="header">Online List</div>
+          <div class="content">
+            <div class="ts list" id="online-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="twelve wide column">
+      <div class="ts pointing secondary menu" id="menu"></div>
+      <div class="ts chatroom" id="chat"></div>
+    </div>
+  </div>
+  <form class="ts form" id="sendform">
+    <div class="inline fields">
+      <div class="three wide field">
+        <input type="text" id="yourname" placeholder="Your Name">
+      </div>
+      <div class="five wide disabled field">
+        <input type="text" id="sendto" placeholder="Send to *everyone*">
+      </div>
+      <div class="seven wide disabled field">
+        <input type="text" id="message" placeholder="Message">
+      </div>
+      <div class="one wide disabled field">
+        <button class="ts primary button" type="submit" id="sendbtn">Send</button>
+      </div>
+    </div>
+  </form>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.17.1/moment-with-locales.min.js"></script>
+<script type="text/javascript">
+(function() {
+  function isElement(obj) {
+    try {
+      return obj instanceof HTMLElement;
+    } catch(e) {
+      return
+        typeof obj === 'object' &&
+        obj.nodeType === 1 &&
+        typeof obj.style === 'object' &&
+        typeof obj.ownerDocument === 'object';
+    }
+  }
+  function removeElement(array) {
+    for(var i = 1, l = arguments.length, x; i < l; i++) {
+      var entry = arguments[i];
+      while((x = array.indexOf(entry)) !== -1)
+        array.splice(x, 1);
+    }
+    return array;
+  }
+  function constructDom(tree, attributes, result) {
+    if(!Array.isArray(result)) result = [];
+    function _construct(tree, attributes) {
+      if(!tree) return;
+      if(isElement(tree)) return tree;
+      switch(typeof tree) {
+        case 'string':
+          switch(typeof attributes) {
+            case 'undefined':
+              var textNode = document.createTextNode(tree);
+              result.push(textNode);
+              return textNode;
+            case 'object': break;
+            default:
+              attributes = { innerHTML: attributes.toString() };
+              break;
+          }
+          attributes.tagName = tree;
+          tree = attributes;
+        case 'object':
+          var element = document.createElement(tree.tagName), children;
+          if(Array.isArray(tree.className))
+            tree.className = tree.className.join(' ');
+          if(typeof tree.children !== 'undefined')
+            children = (tree.children instanceof Array) ? tree.children : [tree.children];
+          if(typeof tree.style === 'object')
+            for(var styleName in tree.style)
+              element.style[styleName] = tree.style[styleName];
+          for(var attribute in tree)
+            switch(attribute) {
+              case 'children': case 'tagName': case 'style': continue;
+              default:
+                if(attribute in element)
+                  element[attribute] = tree[attribute];
+                else
+                  element.setAttribute(attribute, tree[attribute]);
+                break;
+            }
+          result.push(element);
+          if(children)
+            for(var i = 0, l = children.length, child; i < l; i++)
+              if(child = _construct(children[i]))
+                element.appendChild(child);
+          return element;
+      }
+    }
+    return _construct(tree, attributes || {});
+  }
+  function changeTab(group) {
+    for(var g in chatContainers) {
+      if(g === group) {
+        chatContainers[g].container.style.display = 'block';
+        chatContainers[g].tab.classList.add('active');
+        chatContainers[g].tab.classList.remove('unread');
+      } else {
+        chatContainers[g].container.style.display = 'none';
+        chatContainers[g].tab.classList.remove('active');
+      }
+    }
+    if(chatContainers[group].group)
+      toElm.value = chatContainers[group].group.join(',');
+    selectedTab = group;
+  }
+  function createTab(data, group, focus) {
+    if(!focus) {
+      var hasElements;
+      for(var g in chatContainers) {
+        hasElements = true;
+        break;
+      }
+      if(!hasElements) focus = true;
+    }
+    if(group in chatContainers) {
+      if(focus) changeTab(group);
+      return;
+    }
+    var container = constructDom('div', {
+      className: 'content',
+      style: { display: focus ? 'block' : 'none'  }
+    });
+    var tab = constructDom('a', {
+      className: 'item ' + (focus ? 'active': 'unread'),
+      href: '###',
+      children: [
+        data.group.length ? (data.group.length > 3 ?
+          data.group.slice(0, 3).join(', ') + ' and others' :
+          data.group.join(', ')) : '[Global]',
+        data.group.length ? {
+          tagName: 'a',
+          href: '###',
+          onclick: function(e) {
+            e.preventDefault();
+            var g = chatContainers[group];
+            g.container.parentNode.removeChild(g.container);
+            g.tab.parentNode.removeChild(g.tab);
+            delete chatContainers[group];
+            if(selectedTab === group)
+              changeTab('');
+          },
+          children: [{
+            tagName: 'i', className: 'remove icon'
+          }]
+        } : null
+      ],
+      'data-tooltip': group,
+      onclick: function(e) {
+        e.preventDefault();
+        if(group in chatContainers)
+          changeTab(group);
+      }
+    });
+    chatContainer.appendChild(container);
+    menuContainer.appendChild(tab);
+    chatContainers[group] = { container, tab, group: data && data.group };
+  }
+  function appendToChat(data, content, focus) {
+    var group = data && data.group && data.group.length ? data.group.join('\n') : '';
+    createTab(data || { group: [] }, group, focus);
+    var chatContainer = chatContainers[group];
+    var classList = chatContainer.tab.classList;
+    if(!classList.contains('active'))
+      classList.add('unread');
+    chatContainer.container.appendChild(constructDom('div', content));
+    chatContainer.container.scrollTop = chatContainer.container.scrollHeight;
+  }
+  function makeMsg(data, isSend) {
+    var timeElm = constructDom('div', {
+      className: 'item time',
+      innerText: moment.unix(data.time).format('lll')
+    });
+    appendToChat(data, {
+      className: 'message ' + (isSend ? 'right' : 'left'),
+      children: [{
+        tagName: 'div', className: 'content',
+        children: [{
+          tagName: 'div', className: 'text',
+          children: [{
+            tagName: 'div', className: 'author',
+            children: [{
+              tagName: 'a',
+              href: '#chat-with-' + data.from.replace(/\W+/,'-'),
+              innerText: data.from,
+              onclick: function(e) {
+                e.preventDefault();
+                if(!isSend) toElm.value = data.from;
+              }
+            }]
+          }, data.message]
+        }, {
+          tagName: 'div', className: 'bulleted meta',
+          children: [timeElm]
+        }]
+      }]
+    }, isSend);
+    if(!isSend && Notification) {
+      requestNotification();
+      if(Notification.permission === 'granted')
+        new Notification(data.from + ':\n' + data.message);
+    }
+  }
+  function addUserToList(name) {
+    olElms[name] = constructDom('div', {
+      className: 'item',
+      children: [{
+        tagName: 'a',
+        href: '###',
+        innerText: name,
+        onclick: function(e) {
+          e.preventDefault();
+          if(name !== myName)
+            toElm.value = name;
+        }
+      }]
+    });
+    olContainer.appendChild(olElms[name]);
+  }
+  function requestNotification() {
+    if(Notification && Notification.permission !== 'granted') {
+      Notification.requestPermission(function(status) {
+        if(Notification.permission !== status)
+          Notification.permission = status;
+      });
+    }
+  }
+  var locale = window.navigator.userLanguage || window.navigator.language;
+  if(moment) moment.locale(locale);
+  var olContainer = document.getElementById('online-list');
+  var menuContainer = document.getElementById('menu');
+  var chatContainer = document.getElementById('chat');
+  var formElm = document.getElementById('sendform');
+  var nameElm = document.getElementById('yourname');
+  var toElm = document.getElementById('sendto');
+  var msgElm = document.getElementById('message');
+  var sendElm = document.getElementById('sendbtn');
+  var myName, selectedTab;
+  var chatContainers = {};
+  var olElms = {};
+  var inViewTimeElements = [];
+  var socket = io();
+  socket.on('connect', function() {
+    appendToChat(null, {
+      className: 'divider',
+      innerText: 'You are now connected.'
+    });
+    if(myName) socket.emit('rename', myName);
+  });
+  socket.on('disconnect', function() {
+    appendToChat(null, {
+      className: 'divider',
+      innerText: 'You are now disconnected.'
+    });
+  });
+  socket.on('online', function(listOfNames) {
+    while(olContainer.firstChild)
+      olContainer.removeChild(olContainer.firstChild);
+    olElms = {};
+    for(var i = 0; i < listOfNames.length; i++) {
+      addUserToList(listOfNames[i]);
+    }
+  });
+  socket.on('rename-failed', function(oldName) {
+    myName = oldName;
+    if(oldName) {
+      nameElm.value = oldName;
+    } else {
+      toElm.parentNode.classList.add('disabled');
+      msgElm.parentNode.classList.add('disabled');
+      sendElm.parentNode.classList.add('disabled');
+    }
+  });
+  socket.on('user-updated', function(data) {
+    var oldName = data.oldName, newName = data.newName;
+    if(oldName && oldName in olElms) {
+      olContainer.removeChild(olElms[oldName]);
+      delete olElms[oldName];
+    }
+    if(newName)
+      addUserToList(newName);
+    appendToChat(null, {
+      className: 'divider',
+      innerText: newName ? (oldName ?
+        oldName + ' is renamed to ' + newName + '.' :
+        newName + ' is online now.') :
+        oldName + ' is offline now.'
+    });
+  });
+  socket.on('msgsent', function(data) {
+    makeMsg(data, true);
+    msgElm.value = '';
+  });
+  socket.on('msgarrive', function(data) {
+    makeMsg(data, false);
+  });
+  formElm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    if(nameElm.value !== myName) {
+      myName = nameElm.value;
+      socket.emit('rename', myName);
+      toElm.parentNode.classList.remove('disabled');
+      msgElm.parentNode.classList.remove('disabled');
+      sendElm.parentNode.classList.remove('disabled');
+    }
+    if(msgElm.value)
+      socket.emit('sendmsg', { to: toElm.value, message: msgElm.value });
+  });
+  requestNotification();
+})();
+</script>
+<style type="text/css">
+html, body { height: 100%; }
+#chat {
+  height: 100%;
+  height: calc(100vh - 120px);
+  overflow: auto;
+}
+</style>
+<link rel="stylesheet" href="https://cdn.rawgit.com/TeaMeow/TocasUI/master/dist/tocas.min.css">
+</Body>
+</HTML>
