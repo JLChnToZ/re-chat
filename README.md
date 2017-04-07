@@ -8,7 +8,6 @@ Installation
 ------------
 ```bash
 $ npm install
- #
 ```
 , then run it:
 ```bash
@@ -16,7 +15,7 @@ $ node index.js
 ```
 ...or
 ```bash
-forever start index.js
+$ forever start index.js
 ```
 if you have [forever](https://github.com/foreverjs/forever) and you want it run at background forever.
 

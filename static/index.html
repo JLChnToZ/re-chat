@@ -182,12 +182,12 @@
   function appendToChat(data, content, focus) {
     var group = data && data.group && data.group.length ? data.group.join('\n') : '';
     createTab(data || { group: [] }, group, focus);
-    var chatContainer = chatContainers[group];
-    var classList = chatContainer.tab.classList;
+    var cc = chatContainers[group];
+    var classList = cc.tab.classList;
     if(!classList.contains('active'))
       classList.add('unread');
-    chatContainer.container.appendChild(constructDom('div', content));
-    chatContainer.container.scrollTop = chatContainer.container.scrollHeight;
+    cc.container.appendChild(constructDom('div', content));
+    chatContainer.scrollTop = chatContainer.scrollHeight;
   }
   function makeMsg(data, isSend) {
     var timeElm = constructDom('div', {
