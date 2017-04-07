@@ -23,3 +23,8 @@ if you have [forever](https://github.com/foreverjs/forever) and you want it run 
 License
 -------
 [![WTFPL](http://www.wtfpl.net/wp-content/uploads/2012/12/wtfpl-badge-2.png)](LICENSE)
+
+  Copyright © 2017 Jeremy Lam "JLChnToZ"
+  This work is free. You can redistribute it and/or modify it under the
+  terms of the Do What The Fu*k You Want To Public License, Version 2,
+  as published by Sam Hocevar. See the [LICENSE](LICENSE) file for more details.
